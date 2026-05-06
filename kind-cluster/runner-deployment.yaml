@@ -15,6 +15,7 @@ spec:
       containers:
       - name: runner
         image: my56k8s.jfrog.io/sample-docker-local/github-runner:latest
+        imagePullPolicy: Never
 
         env:
         - name: REPO_URL
