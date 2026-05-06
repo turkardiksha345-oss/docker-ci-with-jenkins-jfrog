@@ -4,32 +4,59 @@ set -e
 
 echo "🚀 Setting up GitHub Actions Runner..."
 
-# Install dependencies
+# ===== CONFIG =====
+RUNNER_DIR="$HOME/actions-runner"
+REPO_URL="https://github.com/turkardiksha345-oss/docker-ci-with-jenkins-jfrog"
+
+# ===== INSTALL DEPENDENCIES =====
+echo "📦 Installing dependencies..."
 sudo apt update
-sudo apt install -y curl tar jq
+sudo apt install -y curl tar jq git
 
-# Create runner directory
-mkdir -p ~/actions-runner
-cd ~/actions-runner
+# ===== CLEAN OLD RUNNER (optional) =====
+if [ -d "$RUNNER_DIR" ]; then
+  echo "⚠️ Existing runner found, removing..."
+  rm -rf $RUNNER_DIR
+fi
 
-# Download latest runner
+# ===== CREATE RUNNER DIR =====
+mkdir -p $RUNNER_DIR
+cd $RUNNER_DIR
+
+# ===== DOWNLOAD RUNNER =====
 echo "⬇️ Downloading runner..."
 curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
 tar xzf actions-runner.tar.gz
+rm actions-runner.tar.gz
 
-# Configure runner
+# ===== INSTALL DEPENDENCIES (runner specific) =====
+echo "🔧 Installing runner dependencies..."
+sudo ./bin/installdependencies.sh
+
+# ===== GET TOKEN =====
 echo ""
-echo "👉 Go to your GitHub repo:"
+echo "👉 Go to GitHub:"
 echo "Settings → Actions → Runners → New self-hosted runner"
-echo "Copy ONLY this command:"
-echo "./config.sh --url ... --token ..."
+echo "Copy ONLY the token"
 echo ""
 
-read -p "Paste config command: " CONFIG_CMD
-eval $CONFIG_CMD
+read -p "🔑 Enter Runner Token: " TOKEN
 
-# Install as service (better than manual run)
+# ===== CONFIGURE RUNNER =====
+echo "⚙️ Configuring runner..."
+./config.sh \
+  --url $REPO_URL \
+  --token $TOKEN \
+  --name "ec2-runner-$(hostname)" \
+  --labels "self-hosted,linux,ec2" \
+  --unattended \
+  --work _work
+
+# ===== INSTALL AS SERVICE =====
+echo "🔧 Installing as service..."
 sudo ./svc.sh install
 sudo ./svc.sh start
 
-echo "✅ Runner installed and running as service!"
+echo ""
+echo "✅ Runner setup completed!"
+echo "👉 Check GitHub → Settings → Actions → Runners → ONLINE"
