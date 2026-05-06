@@ -11,9 +11,6 @@ pipeline {
 
     stages {
 
-        // =========================
-        // CHECKOUT CODE
-        // =========================
         stage('Checkout') {
             steps {
                 git branch: "main",
@@ -21,9 +18,6 @@ pipeline {
             }
         }
 
-        // =========================
-        // BUILD RUNNER IMAGE
-        // =========================
         stage('Build Runner Image') {
             steps {
                 sh '''
@@ -34,9 +28,6 @@ pipeline {
             }
         }
 
-        // =========================
-        // BUILD APP IMAGE
-        // =========================
         stage('Build App Image') {
             steps {
                 sh '''
@@ -47,9 +38,6 @@ pipeline {
             }
         }
 
-        // =========================
-        // PUSH TO JFROG
-        // =========================
         stage('Push Images to JFrog') {
             steps {
                 withCredentials([usernamePassword(
@@ -60,11 +48,9 @@ pipeline {
                     sh '''
                     echo $JFROG_PASSWORD | docker login my56k8s.jfrog.io -u $JFROG_USER --password-stdin
 
-                    # Push runner image
                     docker push $DOCKER_REGISTRY/$RUNNER_IMAGE:$IMAGE_TAG
                     docker push $DOCKER_REGISTRY/$RUNNER_IMAGE:latest
 
-                    # Push app image
                     docker push $DOCKER_REGISTRY/$APP_IMAGE:$IMAGE_TAG
                     docker push $DOCKER_REGISTRY/$APP_IMAGE:latest
                     '''
@@ -72,27 +58,29 @@ pipeline {
             }
         }
 
-        // =========================
-        // LOAD IMAGE INTO KIND
-        // =========================
         stage('Load Image to KIND') {
             steps {
                 sh '''
-                echo "📦 Loading app image into KIND cluster..."
-                kind load docker-image $APP_IMAGE:$IMAGE_TAG --name $CLUSTER_NAME || true
+                echo "📦 Loading image into KIND..."
+
+                if command -v kind >/dev/null 2>&1; then
+                    kind load docker-image $APP_IMAGE:$IMAGE_TAG --name $CLUSTER_NAME
+                else
+                    echo "❌ KIND not installed"
+                    exit 1
+                fi
                 '''
             }
         }
 
-        // =========================
-        // DEPLOY TO K8S (APP)
-        // =========================
         stage('Deploy App to Kubernetes') {
             steps {
                 sh '''
                 echo "🚀 Deploying app..."
 
-                kubectl apply -f kind-cluster/app-deployment.yaml
+                ls -R
+
+                kubectl apply -f ./kind-cluster/app-deployment.yaml
 
                 kubectl set image deployment/ci-app \
                 app=$APP_IMAGE:$IMAGE_TAG --record
@@ -100,15 +88,12 @@ pipeline {
             }
         }
 
-        // =========================
-        // DEPLOY RUNNER TO K8S
-        // =========================
         stage('Deploy Runner to Kubernetes') {
             steps {
                 sh '''
-                echo "🚀 Deploying GitHub Runner..."
+                echo "🚀 Deploying runner..."
 
-                kubectl apply -f kind-cluster/runner-deployment.yaml
+                kubectl apply -f ./kind-cluster/runner-deployment.yaml
                 '''
             }
         }
@@ -116,7 +101,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Full pipeline completed successfully"
+            echo "✅ Pipeline completed successfully"
         }
         failure {
             echo "❌ Pipeline failed"
