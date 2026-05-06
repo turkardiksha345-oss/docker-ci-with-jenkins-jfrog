@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'your-domain.jfrog.io'
+        DOCKER_REGISTRY = 'my56k8s.jfrog.io'
         IMAGE_NAME = 'ci-pipeline-app'
         IMAGE_TAG = "${env.BUILD_NUMBER}-${params.COMMIT.take(7)}"
     }
@@ -17,7 +17,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: "${params.BRANCH}",
-                    url: 'https://github.com/your-org/ci-pipeline-github-jenkins-jfrog.git'
+                    url: 'https://github.com/turkardiksha345-oss/docker-ci-with-jenkins-jfrog.git'
             }
         }
 
