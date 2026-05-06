@@ -1,0 +1,99 @@
+name: CI Pipeline - GitHub → Jenkins → JFrog
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  trigger-jenkins:
+    runs-on: self-hosted
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔍 Display build info
+      run: |
+        echo "Repository: ${{ github.repository }}"
+        echo "Branch: ${{ github.ref_name }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Actor: ${{ github.actor }}"
+        echo "Time: $(date)"
+
+    - name: 🔧 Install jq (if not present)
+      run: |
+        if ! command -v jq &> /dev/null; then
+          sudo apt-get update && sudo apt-get install -y jq
+        fi
+
+    - name: 🔐 Get Jenkins Crumb (CSRF)
+      id: crumb
+      run: |
+        CRUMB=$(curl -s -u ${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }} \
+        "${{ secrets.JENKINS_URL }}/crumbIssuer/api/json" | jq -r '.crumb')
+
+        echo "crumb=$CRUMB" >> $GITHUB_OUTPUT
+
+    - name: 🚀 Trigger Jenkins Pipeline
+      id: trigger
+      run: |
+        echo "Triggering Jenkins..."
+
+        QUEUE_URL=$(curl -s -D - \
+          -u ${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }} \
+          -H "Jenkins-Crumb: ${{ steps.crumb.outputs.crumb }}" \
+          -X POST \
+          "${{ secrets.JENKINS_URL }}/job/${{ secrets.JENKINS_JOB_NAME }}/buildWithParameters?BRANCH=${{ github.ref_name }}&COMMIT=${{ github.sha }}" \
+          | grep -i Location | awk '{print $2}' | tr -d '\r')
+
+        echo "queue_url=$QUEUE_URL" >> $GITHUB_OUTPUT
+
+    - name: ⏳ Get Build URL from Queue
+      id: build
+      run: |
+        echo "Waiting for Jenkins to assign build..."
+
+        for i in {1..10}; do
+          BUILD_URL=$(curl -s -u ${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }} \
+            "${{ steps.trigger.outputs.queue_url }}api/json" | jq -r '.executable.url')
+
+          if [ "$BUILD_URL" != "null" ]; then
+            echo "build_url=$BUILD_URL" >> $GITHUB_OUTPUT
+            echo "Build started: $BUILD_URL"
+            exit 0
+          fi
+
+          echo "Still waiting... ($i/10)"
+          sleep 5
+        done
+
+        echo "❌ Failed to get build URL"
+        exit 1
+
+    - name: 📊 Monitor Jenkins Build
+      run: |
+        BUILD_URL=${{ steps.build.outputs.build_url }}
+
+        echo "Monitoring: $BUILD_URL"
+
+        for i in {1..60}; do
+          STATUS=$(curl -s -u ${{ secrets.JENKINS_USER }}:${{ secrets.JENKINS_TOKEN }} \
+            "$BUILD_URL/api/json" | jq -r '.result')
+
+          if [ "$STATUS" = "SUCCESS" ]; then
+            echo "✅ Jenkins build successful"
+            exit 0
+          elif [ "$STATUS" = "FAILURE" ] || [ "$STATUS" = "ABORTED" ]; then
+            echo "❌ Jenkins failed: $STATUS"
+            echo "Logs: $BUILD_URL/console"
+            exit 1
+          else
+            echo "⏳ Running... ($i/60)"
+          fi
+
+          sleep 30
+        done
+
+        echo "⏰ Timeout reached"
+        exit 1
