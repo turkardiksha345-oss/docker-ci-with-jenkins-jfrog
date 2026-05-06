@@ -14,10 +14,12 @@ spec:
     spec:
       containers:
       - name: runner
-        image: github-runner:8
+        image: my56k8s.jfrog.io/sample-docker-local/github-runner:latest
+
         env:
         - name: REPO_URL
           value: "https://github.com/turkardiksha345-oss/docker-ci-with-jenkins-jfrog"
+
         - name: GITHUB_PAT
           valueFrom:
             secretKeyRef:
