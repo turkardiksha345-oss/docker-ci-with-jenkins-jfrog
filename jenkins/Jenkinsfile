@@ -3,7 +3,8 @@ pipeline {
 
     environment {
         DOCKER_REGISTRY = 'my56k8s.jfrog.io/sample-docker-local'
-        IMAGE_NAME = 'ci-pipeline-app'
+        APP_IMAGE = 'ci-pipeline-app'
+        RUNNER_IMAGE = 'github-runner'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
 
@@ -16,16 +17,35 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        // =========================
+        // BUILD RUNNER IMAGE
+        // =========================
+        stage('Build Runner Image') {
             steps {
                 sh '''
-                docker build -t $IMAGE_NAME:$IMAGE_TAG -f docker/Dockerfile .
-                docker tag $IMAGE_NAME:$IMAGE_TAG $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
-                docker tag $IMAGE_NAME:$IMAGE_TAG $DOCKER_REGISTRY/$IMAGE_NAME:latest
+                docker build -t $RUNNER_IMAGE:$IMAGE_TAG ./docker/runners
+                docker tag $RUNNER_IMAGE:$IMAGE_TAG $DOCKER_REGISTRY/$RUNNER_IMAGE:$IMAGE_TAG
+                docker tag $RUNNER_IMAGE:$IMAGE_TAG $DOCKER_REGISTRY/$RUNNER_IMAGE:latest
                 '''
             }
         }
 
+        // =========================
+        // BUILD APP IMAGE
+        // =========================
+        stage('Build App Image') {
+            steps {
+                sh '''
+                docker build -t $APP_IMAGE:$IMAGE_TAG -f docker/Dockerfile .
+                docker tag $APP_IMAGE:$IMAGE_TAG $DOCKER_REGISTRY/$APP_IMAGE:$IMAGE_TAG
+                docker tag $APP_IMAGE:$IMAGE_TAG $DOCKER_REGISTRY/$APP_IMAGE:latest
+                '''
+            }
+        }
+
+        // =========================
+        // PUSH BOTH IMAGES
+        // =========================
         stage('Push to JFrog') {
             steps {
                 withCredentials([usernamePassword(
@@ -36,17 +56,40 @@ pipeline {
                     sh '''
                     echo $JFROG_PASSWORD | docker login my56k8s.jfrog.io -u $JFROG_USER --password-stdin
 
-                    docker push $DOCKER_REGISTRY/$IMAGE_NAME:$IMAGE_TAG
-                    docker push $DOCKER_REGISTRY/$IMAGE_NAME:latest
+                    # Push runner
+                    docker push $DOCKER_REGISTRY/$RUNNER_IMAGE:$IMAGE_TAG
+                    docker push $DOCKER_REGISTRY/$RUNNER_IMAGE:latest
+
+                    # Push app
+                    docker push $DOCKER_REGISTRY/$APP_IMAGE:$IMAGE_TAG
+                    docker push $DOCKER_REGISTRY/$APP_IMAGE:latest
                     '''
                 }
+            }
+        }
+
+        // =========================
+        // RUN RUNNER CONTAINER
+        // =========================
+        stage('Run GitHub Runner') {
+            steps {
+                sh '''
+                docker rm -f github-runner || true
+
+                docker run -d \
+                  --name github-runner \
+                  -e REPO_URL=https://github.com/turkardiksha345-oss/docker-ci-with-jenkins-jfrog \
+                  -e RUNNER_TOKEN=YOUR_TOKEN_HERE \
+                  -v /var/run/docker.sock:/var/run/docker.sock \
+                  $DOCKER_REGISTRY/$RUNNER_IMAGE:latest
+                '''
             }
         }
     }
 
     post {
         success {
-            echo "✅ Image pushed to JFrog successfully"
+            echo "✅ Runner + App images pushed & runner started"
         }
         failure {
             echo "❌ Pipeline failed"
