@@ -6,8 +6,8 @@ WORKDIR /app
 # Copy dependency files
 COPY app/package*.json ./
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install dependencies (FIXED)
+RUN npm install --omit=dev
 
 # Copy app source
 COPY app/ .
@@ -16,7 +16,7 @@ COPY app/ .
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-# Expose app port (optional)
+# Expose app port
 EXPOSE 3000
 
 # Start app
