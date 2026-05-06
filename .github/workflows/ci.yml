@@ -7,7 +7,7 @@ on:
 
 jobs:
   trigger-jenkins:
-    runs-on: self-hosted
+    runs-on: [self-hosted, ec2]
 
     steps:
     - name: 📥 Checkout code
