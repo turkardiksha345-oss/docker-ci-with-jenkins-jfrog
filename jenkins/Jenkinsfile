@@ -6,10 +6,14 @@ pipeline {
         APP_IMAGE = 'ci-pipeline-app'
         RUNNER_IMAGE = 'github-runner'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
+        CLUSTER_NAME = "my-cluster"
     }
 
     stages {
 
+        // =========================
+        // CHECKOUT CODE
+        // =========================
         stage('Checkout') {
             steps {
                 git branch: "main",
@@ -44,9 +48,9 @@ pipeline {
         }
 
         // =========================
-        // PUSH BOTH IMAGES
+        // PUSH TO JFROG
         // =========================
-        stage('Push to JFrog') {
+        stage('Push Images to JFrog') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'jfrog-creds',
@@ -56,11 +60,11 @@ pipeline {
                     sh '''
                     echo $JFROG_PASSWORD | docker login my56k8s.jfrog.io -u $JFROG_USER --password-stdin
 
-                    # Push runner
+                    # Push runner image
                     docker push $DOCKER_REGISTRY/$RUNNER_IMAGE:$IMAGE_TAG
                     docker push $DOCKER_REGISTRY/$RUNNER_IMAGE:latest
 
-                    # Push app
+                    # Push app image
                     docker push $DOCKER_REGISTRY/$APP_IMAGE:$IMAGE_TAG
                     docker push $DOCKER_REGISTRY/$APP_IMAGE:latest
                     '''
@@ -69,19 +73,42 @@ pipeline {
         }
 
         // =========================
-        // RUN RUNNER CONTAINER
+        // LOAD IMAGE INTO KIND
         // =========================
-        stage('Run GitHub Runner') {
+        stage('Load Image to KIND') {
             steps {
                 sh '''
-                docker rm -f github-runner || true
+                echo "📦 Loading app image into KIND cluster..."
+                kind load docker-image $APP_IMAGE:$IMAGE_TAG --name $CLUSTER_NAME || true
+                '''
+            }
+        }
 
-                docker run -d \
-                  --name github-runner \
-                  -e REPO_URL=https://github.com/turkardiksha345-oss/docker-ci-with-jenkins-jfrog \
-                  -e RUNNER_TOKEN=YOUR_TOKEN_HERE \
-                  -v /var/run/docker.sock:/var/run/docker.sock \
-                  $DOCKER_REGISTRY/$RUNNER_IMAGE:latest
+        // =========================
+        // DEPLOY TO K8S (APP)
+        // =========================
+        stage('Deploy App to Kubernetes') {
+            steps {
+                sh '''
+                echo "🚀 Deploying app..."
+
+                kubectl apply -f kind-cluster/app-deployment.yaml
+
+                kubectl set image deployment/ci-app \
+                app=$APP_IMAGE:$IMAGE_TAG --record
+                '''
+            }
+        }
+
+        // =========================
+        // DEPLOY RUNNER TO K8S
+        // =========================
+        stage('Deploy Runner to Kubernetes') {
+            steps {
+                sh '''
+                echo "🚀 Deploying GitHub Runner..."
+
+                kubectl apply -f kind-cluster/runner-deployment.yaml
                 '''
             }
         }
@@ -89,7 +116,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ Runner + App images pushed & runner started"
+            echo "✅ Full pipeline completed successfully"
         }
         failure {
             echo "❌ Pipeline failed"

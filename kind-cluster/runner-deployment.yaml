@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: github-runner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: github-runner
+  template:
+    metadata:
+      labels:
+        app: github-runner
+    spec:
+      containers:
+      - name: runner
+        image: github-runner:8
+        env:
+        - name: REPO_URL
+          value: "https://github.com/turkardiksha345-oss/docker-ci-with-jenkins-jfrog"
+        - name: GITHUB_PAT
+          valueFrom:
+            secretKeyRef:
+              name: github-pat
+              key: GITHUB_PAT
+
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+
+        resources:
+          requests:
+            cpu: "200m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
