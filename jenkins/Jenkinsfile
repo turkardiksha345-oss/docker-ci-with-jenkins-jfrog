@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_REGISTRY = 'my56k8s.jfrog.io'
+        DOCKER_REGISTRY = 'my56k8s.jfrog.io/sample-docker-local'
         IMAGE_NAME = 'ci-pipeline-app'
         IMAGE_TAG = "${env.BUILD_NUMBER}-${params.COMMIT.take(7)}"
     }

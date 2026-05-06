@@ -17,16 +17,19 @@ echo "⬇️ Downloading runner..."
 curl -o actions-runner.tar.gz -L https://github.com/actions/runner/releases/latest/download/actions-runner-linux-x64.tar.gz
 tar xzf actions-runner.tar.gz
 
-# Configure runner (MANUAL TOKEN)
+# Configure runner
 echo ""
 echo "👉 Go to your GitHub repo:"
 echo "Settings → Actions → Runners → New self-hosted runner"
-echo "Copy the config command and paste it here"
+echo "Copy ONLY this command:"
+echo "./config.sh --url ... --token ..."
 echo ""
 
-read -p "Paste your config command here: " CONFIG_CMD
+read -p "Paste config command: " CONFIG_CMD
 eval $CONFIG_CMD
 
-# Start runner
-echo "▶️ Starting runner..."
-./run.sh
+# Install as service (better than manual run)
+sudo ./svc.sh install
+sudo ./svc.sh start
+
+echo "✅ Runner installed and running as service!"
